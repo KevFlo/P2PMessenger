@@ -1,114 +1,96 @@
-# Python program to implement server side of chat room.
-import socket
-import select
-import sys
-'''Replace "thread" with "_thread" for python 3'''
-from threading import *
+import socket, select
 
-"""The first argument AF_INET is the address domain of the
-socket. This is used when we have an Internet Domain with
-any two hosts The second argument is the type of socket.
-SOCK_STREAM means that data or characters are read in
-a continuous flow."""
-server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+#Function to send message to all connected clients
+def send_to_all (sock, message):
+	#Message not forwarded to server and sender itself
+	for socket in connected_list:
+		if socket != server_socket and socket != sock :
+			try :
+				socket.send(message)
+			except :
+				# if connection not available
+				socket.close()
+				connected_list.remove(socket)
 
-# checks whether sufficient arguments have been provided
-if len(sys.argv) != 3:
-	print ("Correct usage: script, IP address, port number")
-	exit()
+if __name__ == "__main__":
+	name=""
+	#dictionary to store address corresponding to username
+	record={}
+	# List to keep track of socket descriptors
+	connected_list = []
+	buffer = 4096
+	port = 5001
 
-# takes the first argument from command prompt as IP address
-IP_address = str(sys.argv[1])
+	server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-# takes second argument from command prompt as port number
-Port = int(sys.argv[2])
+	server_socket.bind(("localhost", port))
+	server_socket.listen(10) #listen atmost 10 connection at one time
 
-"""
-binds the server to an entered IP address and at the
-specified port number.
-The client must be aware of these parameters
-"""
-server.bind((IP_address, Port))
+	# Add server socket to the list of readable connections
+	connected_list.append(server_socket)
 
+	print("\33[32m \t\t\t\tSERVER WORKING \33[0m")
 
-# username = input('Enter Username:')
+	while 1:
+        # Get the list sockets which are ready to be read through select
+		rList,wList,error_sockets = select.select(connected_list,[],[])
 
-
-"""
-listens for 100 active connections. This number can be
-increased as per convenience.
-"""
-server.listen(100)
-
-list_of_clients = []
-
-def clientthread(conn, addr, usrnm):
-
-	# sends a message to the client whose user object is conn
-	conn.send("Welcome to the chatroom!")
-
-	while True:
-			try:
-				message = conn.recv(2048)
-				if message:
-
-					"""prints the message and address of the
-					user who just sent the message on the server
-					terminal"""
-					print ("<" + usrnm + addr[0] + "> " + message)
-
-					# Calls broadcast function to send message to all
-					message_to_send = "<" + usrnm + addr[0] + "> " + message
-					broadcast(message_to_send, conn)
-
+		for sock in rList:
+			#New connection
+			if sock == server_socket:
+				# Handle the case in which there is a new connection recieved through server_socket
+				sockfd, addr = server_socket.accept()
+				name=sockfd.recv(buffer)
+				connected_list.append(sockfd)
+				record[addr]=""
+				#print "record and conn list ",record,connected_list
+                
+                #if repeated username
+				if name in record.values():
+					sockfd.send("\r\33[31m\33[1m Username already taken!\n\33[0m".encode("utf-8"))
+					del record[addr]
+					connected_list.remove(sockfd)
+					sockfd.close()
+					continue
 				else:
-					"""message may have no content if the connection
-					is broken, in this case we remove the connection"""
-					remove(conn)
+                    #add name and address
+					record[addr]=name
+					print("Client (%s, %s) connected" % addr," [",record[addr],"]")
+					sockfd.send("\33[32m\r\33[1m Welcome to chat room. Enter 'clos3 or 3xit' anytime to exit\n\33[0m".encode("utf-8"))
+					send_to_all(sockfd, "\33[32m\33[1m\r "+name.decode()+" joined the conversation \n\33[0m")
 
-			except:
-				continue
+			#Some incoming message from a client
+			else:
+				# Data from client
+				try:
+					data1 = sock.recv(buffer)
+					#print "sock is: ",sock
+					data=data1[:data1.index("\n")]
+					print ("\ndata received: ",data)
+                    
+                    #get addr of client sending the message
+					i,p=sock.getpeername()
+					if data == "clos3" or data =="3xit":
+						msg="\r\33[1m"+"\33[31m "+record[(i,p)]+" left the conversation \33[0m\n"
+						send_to_all(sock,msg)
+						print("Client (%s, %s) is offline" % (i,p)," [",record[(i,p)],"]")
+						del record[(i,p)]
+						connected_list.remove(sock)
+						sock.close()
+						continue
 
-"""Using the below function, we broadcast the message to all
-clients who's object is not the same as the one sending
-the message """
-def broadcast(message, connection):
-	for clients in list_of_clients:
-		if clients!=connection:
-			try:
-				clients.send(message)
-			except:
-				clients.close()
+					else:
+						msg="\r\33[1m"+"\33[35m "+record[(i,p)]+": "+"\33[0m"+data+"\n"
+						send_to_all(sock,msg)
+            
+                #abrupt user exit
+				except:
+					(i,p)=sock.getpeername()
+					send_to_all(sock, "\r\33[31m \33[1m"+record[(i,p)].decode()+" left the conversation unexpectedly\33[0m\n")
+					print("Client (%s, %s) is offline (error)" % (i,p)," [",record[(i,p)],"]\n")
+					del record[(i,p)]
+					connected_list.remove(sock)
+					sock.close()
+					continue
 
-				# if the link is broken, we remove the client
-				remove(clients)
-
-"""The following function simply removes the object
-from the list that was created at the beginning of
-the program"""
-def remove(connection):
-	if connection in list_of_clients:
-		list_of_clients.remove(connection)
-
-while True:
-
-	"""Accepts a connection request and stores two parameters,
-	conn which is a socket object for that user, and addr
-	which contains the IP address of the client that just
-	connected and the usrnmae of the user   """
-	conn, addr, usrnm = server.accept()
-
-	"""Maintains a list of clients for ease of broadcasting
-	a message to all available people in the chatroom"""
-	list_of_clients.append(conn)
-
-	# prints the address of the user that just connected
-	print (usrnm + addr[0] + " connected")
-
-	# creates and individual thread for every user
-	# that connects
-	start_new_thread(clientthread,(conn,addr,usrnm))	
-
-conn.close()
-server.close()
+	server_socket.close()
