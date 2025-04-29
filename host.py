@@ -1,5 +1,31 @@
-import socket, select
+import socket, select, threading, time
 from datetime import datetime
+
+
+def heartbeat_monitor():
+	while True:
+		now = time.time()
+		to_remove = []
+		for sock in list(last_seen.keys()):
+			if now - last_seen[sock] > pong_timeout:
+				try:
+					addr = sock.getpeername()
+					print(f"[{datetime.now().strftime('%H:%M:%S')}] No response from {record.get(addr, 'Unknown')} — disconnecting")
+					send_to_all(sock, f"{record.get(addr, 'Unknown')} timed out")
+					sock.close()
+					connected_list.remove(sock)
+					del last_seen[sock]
+					del record[addr]
+				except:
+					continue
+		for sock in connected_list:
+			if sock != server_socket:
+				try:
+					sock.send("__ping__\n".encode("utf-8"))
+				except:
+					continue
+		time.sleep(ping_interval)
+
 
 
 def log_message(msg):
@@ -18,13 +44,17 @@ def send_to_all (sock, message):
 				socket.close()
 				connected_list.remove(socket)
 
+
+
 if __name__ == "__main__":
-	#dictionary to store address corresponding to username
-	record={}
-	# List to keep track of socket descriptors
-	connected_list = []
+	
+	record={} 			#dictionary to store address corresponding to username
+	connected_list = [] # List to keep track of socket descriptors
+	last_seen = {}  	# Tracks last time we heard from each client
 	buffer = 4096
 	port = 5001
+	ping_interval = 30  # How often to send __ping__
+	pong_timeout = 400   # Max time to wait for __pong__
 
 	server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	server_socket.bind(("localhost", port))
@@ -33,7 +63,8 @@ if __name__ == "__main__":
 	# Add server socket to the list of readable connections
 	connected_list.append(server_socket)
 	print("\33[32m \t\t\t\tChat Server Started \33[0m")
-
+	#Start heartbeat thread
+	threading.Thread(target=heartbeat_monitor, daemon=True).start()
 	##chat GPT code
 	try:
 		while True:
@@ -68,6 +99,9 @@ if __name__ == "__main__":
 							sock.close()
 							continue
 						data = data1.strip()
+						if data == "__pong__":
+							last_seen[sock] = time.time()
+							continue  # Don't process further
 						i, p = sock.getpeername()
 						if data in ("clos3", "3xit"):
 							leave_msg = f"{record[(i, p)]} left the conversation"
@@ -76,12 +110,14 @@ if __name__ == "__main__":
 							log_message(f"[{datetime.now().strftime('%H:%M:%S')}] {leave_msg}")
 							del record[(i, p)]
 							connected_list.remove(sock)
+							del last_seen[sock]
 							sock.close()
 						else:
 							chat_msg = f"{record[(i, p)]}: {data}"
 							send_to_all(sock, chat_msg)
 							print(f"[{datetime.now().strftime('%H:%M:%S')}] {chat_msg}")
-							log_message(f"[{datetime.now().strftime('%H:%M:%S')}] {chat_msg}")	
+							log_message(f"[{datetime.now().strftime('%H:%M:%S')}] {chat_msg}")
+							last_seen[sock] = time.time()	
 					except:
 						try:
 							i, p = sock.getpeername()
@@ -91,6 +127,7 @@ if __name__ == "__main__":
 							log_message(f"[{datetime.now().strftime('%H:%M:%S')}] {error_msg}")
 							del record[(i, p)]
 							connected_list.remove(sock)
+							del last_seen[sock]
 							sock.close()
 						except:
 							continue

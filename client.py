@@ -48,13 +48,17 @@ def main():
                     if not data:
                         print('\33[31m\33[1m \rDISCONNECTED!!\n \33[0m')
                         sys.exit()
-                    else:
-                        decoded = data.decode()
-                        timestamp = datetime.now().strftime("%H:%M:%S")
-                        msg = f"[{timestamp}] {decoded.strip()}"
-                        print(f"\r{msg}")
-                        log_message(msg)
-                        display()
+
+                    decoded = data.decode().strip()
+                    if decoded == "__ping__":
+                        s.send("__pong__\n".encode("utf-8"))
+                        continue
+
+                    timestamp = datetime.now().strftime("%H:%M:%S")
+                    msg = f"[{timestamp}] {decoded}"
+                    print(f"\r{msg}")
+                    log_message(msg)
+                    display()
                 else:
                     msg = sys.stdin.readline().strip()
                     if msg:
@@ -62,6 +66,7 @@ def main():
                         s.send((msg + "\n").encode("utf-8"))
                         log_message(f"[{timestamp}] You: {msg}")
                     display()
+                
     except KeyboardInterrupt:
         print("\n\33[31m\33[1m Client exiting... \33[0m")
         s.close()
