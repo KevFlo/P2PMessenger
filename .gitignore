@@ -1,0 +1,10 @@
+# Ignore log files
+*.log
+
+# Ignore JSON files (user data)
+*.json
+
+# Ignore any specific files
+host_chat_log.txt
+users.json
+session.json
