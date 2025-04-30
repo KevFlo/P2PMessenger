@@ -98,26 +98,55 @@ if __name__ == "__main__":
 							connected_list.remove(sock)
 							sock.close()
 							continue
+
 						data = data1.strip()
+						
 						if data == "__pong__":
 							last_seen[sock] = time.time()
 							continue  # Don't process further
+
 						i, p = sock.getpeername()
 						if data in ("clos3", "3xit"):
 							leave_msg = f"{record[(i, p)]} left the conversation"
 							send_to_all(sock, leave_msg)
-							print(f"Client ({i}, {p}) [{record[(i,p)]}] disconnected")
+							print(f"Client ({i}, {p}) [{record[(i, p)]}] disconnected")
 							log_message(f"[{datetime.now().strftime('%H:%M:%S')}] {leave_msg}")
 							del record[(i, p)]
 							connected_list.remove(sock)
 							del last_seen[sock]
 							sock.close()
+						elif data.startswith("/users"):
+							users_list = "\n".join(record.values())  # Join all the usernames from the record dictionary
+							sock.send(f"Online users:\n{users_list}\n".encode("utf-8"))
+							continue
+						elif data.startswith("/msg "):
+							parts = data.split(" ", 2)  # Split into /msg, user, message
+							if len(parts) > 2:
+								recipient_name = parts[1]
+								private_message = parts[2]
+
+								# Find the recipient's socket
+								recipient_socket = None
+								for s in connected_list:
+									addr = s.getpeername()
+									if record.get(addr) == recipient_name:
+										print("s",s)
+										print("addr",addr)
+										recipient_socket = s
+										break
+
+								if recipient_socket:
+									recipient_socket.send(f"Private message from {record.get(sock.getpeername())}: {private_message}".encode("utf-8"))
+									sock.send(f"Private message to {recipient_name}: {private_message}".encode("utf-8"))
+								else:
+									sock.send(f"User {recipient_name} not found.".encode("utf-8"))
+
 						else:
 							chat_msg = f"{record[(i, p)]}: {data}"
 							send_to_all(sock, chat_msg)
 							print(f"[{datetime.now().strftime('%H:%M:%S')}] {chat_msg}")
 							log_message(f"[{datetime.now().strftime('%H:%M:%S')}] {chat_msg}")
-							last_seen[sock] = time.time()	
+							last_seen[sock] = time.time()
 					except:
 						try:
 							i, p = sock.getpeername()
@@ -134,69 +163,3 @@ if __name__ == "__main__":
 	except KeyboardInterrupt:
 		print("\n\33[31m\33[1m Server shutting down... \33[0m")
 		server_socket.close()
-
-	###
-
-	# while 1:
-    #     # Get the list sockets which are ready to be read through select
-	# 	rList,wList,error_sockets = select.select(connected_list,[],[])
-
-	# 	for sock in rList:
-	# 		#New connection
-	# 		if sock == server_socket:
-	# 			# Handle the case in which there is a new connection recieved through server_socket
-	# 			sockfd, addr = server_socket.accept()
-	# 			name=sockfd.recv(buffer).decode("utf-8")
-	# 			connected_list.append(sockfd)
-	# 			record[addr]= ""
-	# 			#print "record and conn list ",record,connected_list
-                
-    #             #if repeated username
-	# 			if name in record.values():
-	# 				sockfd.send("\r\33[31m\33[1m Username already taken!\n\33[0m".encode("utf-8"))
-	# 				del record[addr]
-	# 				connected_list.remove(sockfd)
-	# 				sockfd.close()
-	# 				continue
-	# 			else:
-    #                 #add name and address
-	# 				record[addr] = name
-	# 				print("Client (%s, %s) connected" % addr," [",record[addr],"]")
-	# 				sockfd.send("\33[32m\r\33[1m Welcome to chat room. Enter 'clos3 or 3xit' anytime to exit\n\33[0m".encode("utf-8"))
-	# 				send_to_all(sockfd, "\33[32m\33[1m\r "+name.decode()+" joined the conversation \n\33[0m")
-
-	# 		#Some incoming message from a client
-	# 		else:
-	# 			# Data from client
-	# 			try:
-	# 				data1 = sock.recv(buffer).decode("utf-8")
-	# 				#print "sock is: ",sock
-	# 				data=data1.strip()
-	# 				print ("\ndata received: ",data)
-                    
-    #                 #get addr of client sending the message
-	# 				i,p=sock.getpeername()
-	# 				if data == "clos3" or data =="3xit":
-	# 					msg="\r\33[1m"+"\33[31m "+record[(i,p)]+" left the conversation \33[0m\n"
-	# 					send_to_all(sock,msg)
-	# 					print("Client (%s, %s) is offline" % (i,p)," [",record[(i,p)],"]")
-	# 					del record[(i,p)]
-	# 					connected_list.remove(sock)
-	# 					sock.close()
-	# 					continue
-
-	# 				else:
-	# 					msg="\r\33[1m"+"\33[35m "+record[(i,p)]+": "+"\33[0m"+data+"\n"
-	# 					send_to_all(sock,msg)
-            
-    #             #abrupt user exit
-	# 			except:
-	# 				(i,p)=sock.getpeername()
-	# 				send_to_all(sock, "\r\33[31m \33[1m"+record[(i,p)]+" left the conversation unexpectedly\33[0m\n")
-	# 				print("Client (%s, %s) is offline (error)" % (i,p)," [",record[(i,p)],"]\n")
-	# 				del record[(i,p)]
-	# 				connected_list.remove(sock)
-	# 				sock.close()
-	# 				continue
-
-	# server_socket.close()

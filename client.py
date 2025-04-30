@@ -8,11 +8,13 @@ def display() :
 	sys.stdout.flush()
 
 def log_message(msg):
-    with open("client_chat_log.txt","a") as f:
-        f.write(msg + "\n")
+    if log_enabled:
+        with open("client_chat_log.txt","a") as f:
+            f.write(msg + "\n")
 
+log_enabled = True
 def main():
-
+    global log_enabled
     if len(sys.argv)<2:
         host = input("Enter host ip address: ")
     else:
@@ -61,7 +63,38 @@ def main():
                     display()
                 else:
                     msg = sys.stdin.readline().strip()
-                    if msg:
+                    if msg == "/help":
+                        print("""
+                        \33[36m\33[1mAvailable Commands:
+                        /users           - Show list of online users
+                        /msg <user> <msg> - Send a private message
+                        /nick <newname>  - Change your nickname
+                        /log on|off      - Enable or disable chat logging
+                        /exit or /quit   - Exit the chat
+                        /help            - Show this help message
+                        \33[0m
+                        """)
+                        display()
+                        continue
+                    elif msg == "/exit" or msg == "/quit":
+                        print("\33[31m\33[1mExiting...\33[0m")
+                        s.close()
+                        sys.exit()
+                    elif msg == "/log off":
+                        log_enabled = False
+                        print("\33[33m\33[1mLogging disabled.\33[0m")
+                        display()
+                        continue
+                    elif msg == "/log on":
+                        log_enabled = True
+                        print("\33[33m\33[1mLogging enabled.\33[0m")
+                        display()
+                        continue
+                    elif msg.startswith("/users"):
+                        s.send("/users\n".encode("utf-8"))  # send plain
+                    elif msg.startswith("/msg "):
+                        s.send((msg + "\n").encode("utf-8"))
+                    elif msg:
                         timestamp = datetime.now().strftime("%H:%M:%S")
                         s.send((msg + "\n").encode("utf-8"))
                         log_message(f"[{timestamp}] You: {msg}")
@@ -71,31 +104,6 @@ def main():
         print("\n\33[31m\33[1m Client exiting... \33[0m")
         s.close()
         sys.exit()
-
-
-    # while 1:
-    #     socket_list = [sys.stdin, s]
-        
-    #     # Get the list of sockets which are readable
-    #     rList, wList, error_list = select.select(socket_list , [], [])
-        
-    #     for sock in rList:
-    #         #incoming message from server
-    #         if sock == s:
-    #             data = sock.recv(4096)
-    #             if not data :
-    #                 print('\33[31m\33[1m \rDISCONNECTED!!\n \33[0m')
-    #                 sys.exit()
-    #             else :
-    #                 print("initial msg")
-    #                 sys.stdout.write(data.decode())
-    #                 display()
-    #         #user entered a message
-    #         else :
-    #             msg=sys.stdin.readline().strip()
-    #             # s.send("Typing...".encode("utf-8"))
-    #             s.send((msg + "\n").encode("utf-8"))
-    #             display()
 
 if __name__ == "__main__":
     main()
